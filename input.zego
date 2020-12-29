@@ -1,0 +1,7 @@
+package avidbound
+
+abEquals := true {
+    a := input.test
+    b := 13.5
+    a == b
+}
