@@ -38,22 +38,21 @@ const (
 	Comma
 	Colon // TODO
 	Declare
-	Pipe
+	Assign
 
 	Add
 	Subtract
 	Multiply
 	Divide
 	Modulus
-	And // TODO
-	Or  // TODO
-	Equal
-	NEqual // not equal
-	LT     // less than
-	GT     // greater than
-	LTE    // less than or equal
-	GTE    // greater than or equal
-	Assign
+	And       // TODO
+	Or        // TODO
+	NEqual    // not equal
+	Equal     // equal
+	LT        // less than
+	GT        // greater than
+	LTE       // less than or equal
+	GTE       // greater than or equal
 	Dot       // TODO
 	Semicolon // TODO
 )
@@ -83,8 +82,8 @@ var strings = [...]string{
 	RParenthesis: ")",
 	Comma:        ",",
 	Colon:        ":",
-	Declare:      ":=",
-	Pipe:         "|",
+	Declare:      "declare",
+	Assign:       "=",
 	Add:          "plus",     // +
 	Subtract:     "minus",    // -
 	Multiply:     "multiply", // *
@@ -92,13 +91,12 @@ var strings = [...]string{
 	Modulus:      "modulus",  // %
 	And:          "and",      // &
 	Or:           "or",       // |
+	NEqual:       "nEqual",   // !=
 	Equal:        "equal",    // ==
-	NEqual:       "!=",       // !=
-	LT:           "<",
-	GT:           ">",
-	LTE:          "<=",
-	GTE:          ">=",
-	Assign:       "assign", // =
+	LT:           "lt",
+	GT:           "gt",
+	LTE:          "lte",
+	GTE:          "gte",
 	Dot:          ".",
 	Semicolon:    ";",
 }

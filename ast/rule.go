@@ -2,6 +2,7 @@ package ast
 
 import (
 	"fmt"
+	"strings"
 
 	"avidbound.com/zego/ast/term"
 )
@@ -34,7 +35,6 @@ type (
 		Location  *term.Location `json:"-"`
 		Generated bool           `json:"generated,omitempty"`
 		Index     int            `json:"index"`
-		Negated   bool           `json:"negated,omitempty"`
 		Terms     interface{}    `json:"terms"`
 	}
 
@@ -57,8 +57,8 @@ type (
 	// content of documents that represent policy decisions.
 	Rule struct {
 		Location *term.Location `json:"-"`
-		Default  bool           `json:"default,omitempty"`
-		Head     *term.Term     `json:"value,omitempty"`
+		Name     term.Var       `json:"name,omitempty"`
+		Value    *term.Term     `json:"value,omitempty"`
 		Body     Body           `json:"body"`
 
 		// Module is a pointer to the module containing this rule. If the rule
@@ -69,6 +69,24 @@ type (
 	}
 )
 
+// NewExpr returns a new Expr object.
+func NewExpr(terms interface{}) *Expr {
+	return &Expr{
+		Terms: terms,
+		Index: 0,
+	}
+}
+
+func (expr *Expr) String() string {
+	switch t := expr.Terms.(type) {
+	case []*term.Term:
+		return term.Call(t).String()
+	case *term.Term:
+		return t.String()
+	}
+	return ""
+}
+
 func (p *Package) Loc() *term.Location {
 	return p.Location
 }
@@ -78,7 +96,8 @@ func (p *Package) SetLoc(l *term.Location) {
 }
 
 func (p *Package) String() string {
-	return p.Path.String()
+	path := p.Path.String()
+	return fmt.Sprintf("package %v", path)
 }
 
 func (r *Rule) Loc() *term.Location {
@@ -90,5 +109,23 @@ func (r *Rule) SetLoc(l *term.Location) {
 }
 
 func (r *Rule) String() string {
-	return "" // TODO: generate string of Rule
+	if r.Value == nil {
+		return r.Name.String() + " {\n" + r.Body.String() + "\n}\n"
+	}
+	return r.Name.String() + " := " + r.Value.String() + " {\n" + r.Body.String() + "\n}\n"
+}
+
+// Append adds the expr to the body and updates the expr's index accordingly.
+func (body *Body) Append(expr *Expr) {
+	n := len(*body)
+	expr.Index = n
+	*body = append(*body, expr)
+}
+
+func (body Body) String() string {
+	var buf []string
+	for _, v := range body {
+		buf = append(buf, v.String())
+	}
+	return " " + strings.Join(buf, "\n ")
 }

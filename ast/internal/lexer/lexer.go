@@ -183,8 +183,10 @@ func lexScan(l *lexer) stateFn {
 			return l.errorf("expected :=")
 		}
 		l.emit(tokens.Declare)
+	case r == '&':
+		l.emit(tokens.Add)
 	case r == '|':
-		l.emit(tokens.Pipe)
+		l.emit(tokens.Or)
 	case r == '/':
 		l.emit(tokens.Divide)
 	case r == '%':

@@ -22,7 +22,7 @@ type parser struct {
 	state  *state
 }
 
-func Parse(name, input string) {
+func Parse(name, input string) []ast.Statement {
 
 	p := parser{
 		items: lexer.Lex(name, input),
@@ -33,16 +33,21 @@ func Parse(name, input string) {
 		index:  0,
 	}
 
-	p.parse()
+	return p.parse()
 }
 
-// run runs the state machine for the parser.
+// parse runs the state machine for the parser.
 func (p *parser) parse() []ast.Statement {
 	var statements []ast.Statement
 
+	if p.state.token() == tokens.Whitespace || p.state.token() == tokens.EOL {
+		p.state.nextNonSpace()
+	}
+
 Loop:
 	for {
-		switch p.state.token() {
+		tok := p.state.token()
+		switch tok {
 		case tokens.Package:
 			if pkg := p.parsePackage(); pkg != nil {
 				statements = append(statements, pkg)
@@ -74,6 +79,7 @@ func (p *parser) parsePackage() *ast.Package {
 
 	// string term for first ident - parse reference
 	ident := p.items[p.state.index].Value
+	p.state.next()
 	t := p.parseRef(term.StringTerm(ident).SetLoc(p.state.loc()))
 
 	switch v := t.Value.(type) {
@@ -81,7 +87,7 @@ func (p *parser) parsePackage() *ast.Package {
 		pkg.Path = term.Ref{term.StringTerm(string(v)).SetLoc(p.state.loc())}
 		break
 	case term.Ref:
-		// TODO : iterate through Ref - ensure they're all String
+		pkg.Path = v
 		break
 	}
 
@@ -89,17 +95,101 @@ func (p *parser) parsePackage() *ast.Package {
 }
 
 func (p *parser) parseRule() *ast.Rule {
-	return &ast.Rule{}
+	rule := &ast.Rule{}
+
+	if name := p.parseVar(); name != nil {
+		if v, ok := name.Value.(term.Var); ok {
+			rule.Name = v
+		}
+	}
+	if rule.Name == "" {
+		p.errorf(p.state.loc(), "expected rule head name")
+	}
+
+	p.state.nextNonSpace()
+
+	if p.state.token() != tokens.Declare {
+		p.errorf(p.state.loc(), "rules must use := operator")
+		return nil
+	}
+
+	p.state.nextNonSpace()
+
+	rule.Value = p.parseTermRelation(nil) // example: rule := a+b {}
+
+	if p.state.token() == tokens.LBrace {
+		p.state.nextNonSpace()
+		if rule.Body = p.parseQuery(tokens.RBrace); rule.Body == nil {
+			return nil
+		}
+		p.state.nextNonSpace()
+	}
+
+	return rule
+}
+
+func (p *parser) parseQuery(end tokens.Token) ast.Body {
+	body := ast.Body{}
+
+	if p.state.token() == end {
+		p.errorf(p.state.loc(), "found empty body")
+		return nil
+	}
+
+	for {
+		expr := p.parseExpr()
+		if expr == nil {
+			return nil
+		}
+
+		body.Append(expr)
+
+		if p.state.token() == end {
+			return body
+		}
+	}
+}
+
+func (p *parser) parseExpr() *ast.Expr {
+	lhs := p.parseTermRelation(nil)
+	if lhs == nil {
+		return nil
+	}
+
+	tok := p.state.token()
+	if tok == tokens.Declare {
+		p.state.nextNonSpace()
+		if rhs := p.parseTermRelation(nil); rhs != nil {
+			op := term.OpTerm(tok.String()).SetLoc(lhs.Location)
+			return ast.NewExpr([]*term.Term{op, lhs, rhs})
+		}
+		return nil
+	}
+
+	if call, ok := lhs.Value.(term.Call); ok {
+		return ast.NewExpr([]*term.Term(call))
+	}
+
+	return nil
 }
 
 func (p *parser) parseTerm() *term.Term {
 	switch p.state.token() {
+	case tokens.True:
+		term := term.BooleanTerm(true).SetLoc(p.state.loc())
+		p.state.nextNonSpace()
+		return term
+	case tokens.False:
+		term := term.BooleanTerm(false).SetLoc(p.state.loc())
+		p.state.nextNonSpace()
+		return term
 	case tokens.Identifier:
 		term := p.parseVar()
 		// check if next is ident.field or ident.field[_] or ident.call(_)
 		if tok := p.state.next(); tok == tokens.Field || tok == tokens.LParenthesis || tok == tokens.LBracket {
 			return p.parseRef(term)
 		}
+		p.state.nextNonSpace()
 		return term
 	case tokens.Number:
 		return p.parseNumber()
@@ -197,6 +287,7 @@ func (p *parser) parseRef(head *term.Term) *term.Term {
 			}
 			break
 		default:
+			p.state.nextNonSpace()
 			return term.RefTerm(ref...)
 		}
 	}
@@ -325,9 +416,13 @@ func (p *parser) errorf(l *term.Location, f string, a ...interface{}) {
 }
 
 func (s *state) nextNonSpace() tokens.Token {
+Loop:
 	for {
-		if s.next() != tokens.Whitespace {
-			break
+		switch s.next() {
+		case tokens.Whitespace, tokens.EOL:
+			continue Loop
+		default:
+			break Loop
 		}
 	}
 	return s.token()
