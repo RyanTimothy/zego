@@ -20,7 +20,14 @@ func (v Var) Equal(other Value) bool {
 // Compare compares str to other, return <0, 0, or >0 if it is less than, equal to,
 // or greater than other.
 func (v Var) Compare(other Value) int {
-	return Compare(v, other)
+	o := other.(Var)
+	if v.Equal(o) {
+		return 0
+	}
+	if v < o {
+		return -1
+	}
+	return 1
 }
 
 func (v Var) String() string {

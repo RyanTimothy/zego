@@ -23,7 +23,14 @@ func (s String) Equal(other Value) bool {
 // Compare compares str to other, return <0, 0, or >0 if it is less than, equal to,
 // or greater than other.
 func (s String) Compare(other Value) int {
-	return Compare(s, other)
+	o := other.(String)
+	if s.Equal(o) {
+		return 0
+	}
+	if s < o {
+		return -1
+	}
+	return 1
 }
 
 func (s String) String() string {

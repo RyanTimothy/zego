@@ -15,7 +15,6 @@ type Item struct {
 	Token tokens.Token // Type, such as itemNumber.
 	Value string       // Value, such as "23.2".
 	Pos   Pos          // The starting position, in bytes, of this item in the input string.
-	Line  int          // The line number at the start of this item.
 }
 
 // stateFn represents the state of the scanner as a function that returns the next state.
@@ -34,10 +33,9 @@ type lexer struct {
 	trimRightDelim string     // end of action with trim marker
 	pos            Pos        // current position in the input
 	start          Pos        // start position of this item
-	width          Pos        // width of last rune read from input
+	width          int        // width of last rune read from input
 	items          []Item     // scanned items
 	blockDepth     blockDepth // nesting depth of { ( [ exprs
-	line           int        // 1+number of newlines seen
 	startLine      int        // start line of this item
 }
 
@@ -66,9 +64,15 @@ func Lex(name, input string) []Item {
 	l := &lexer{
 		name:       name,
 		input:      input,
-		line:       1,
-		startLine:  1,
 		blockDepth: blockDepth{},
+		pos: Pos{
+			Line:   1,
+			Column: 1,
+		},
+		start: Pos{
+			Line:   1,
+			Column: 1,
+		},
 	}
 	l.run()
 	return l.items
@@ -83,15 +87,17 @@ func (l *lexer) run() {
 
 // next returns the next rune in the input.
 func (l *lexer) next() rune {
-	if int(l.pos) >= len(l.input) {
+	if l.pos.Index >= len(l.input) {
 		l.width = 0
 		return eof
 	}
-	r, w := utf8.DecodeRuneInString(l.input[l.pos:])
-	l.width = Pos(w)
-	l.pos += l.width
+	r, w := utf8.DecodeRuneInString(l.input[l.pos.Index:])
+	l.width = w
+	l.pos.Index += l.width
+	l.pos.Column += l.width
 	if r == '\n' {
-		l.line++
+		l.pos.Line++
+		l.pos.Column = 1
 	}
 	return r
 }
@@ -105,18 +111,33 @@ func (l *lexer) peek() rune {
 
 // backup steps back one rune. Can only be called once per call of next.
 func (l *lexer) backup() {
-	l.pos -= l.width
+	l.pos.Index -= l.width
 	// Correct newline count.
-	if l.width == 1 && l.input[l.pos] == '\n' {
-		l.line--
+	if l.width == 1 && l.input[l.pos.Index] == '\n' {
+		l.pos.Line--
+		// Correct column count.
+		for i := l.pos.Index - 1; i >= 0; i-- {
+			if i == 0 || l.input[i] == '\n' {
+				l.pos.Column = l.pos.Index - i
+				break
+			}
+		}
+	} else {
+		l.pos.Column -= l.width
 	}
 }
 
 // ignore skips over the pending input before this point.
 func (l *lexer) ignore() {
-	l.line += strings.Count(l.input[l.start:l.pos], "\n")
+	l.pos.Line += strings.Count(l.input[l.start.Index:l.pos.Index], "\n")
+	// correct column count
+	for i := l.pos.Index - 1; i >= 0; i-- {
+		if i == 0 || l.input[i] == '\n' {
+			l.pos.Column = l.pos.Index - i
+			break
+		}
+	}
 	l.start = l.pos
-	l.startLine = l.line
 }
 
 // accept consumes the next rune if it's from the valid set.
@@ -205,8 +226,8 @@ func lexScan(l *lexer) stateFn {
 		l.emit(tokens.Comma)
 	case r == '.':
 		// special look-ahead for ".field" so we don't break l.backup().
-		if l.pos < Pos(len(l.input)) {
-			r := l.input[l.pos]
+		if l.pos.Index < len(l.input) {
+			r := l.input[l.pos.Index]
 			if r < '0' || '9' < r {
 				return lexField
 			}
@@ -366,7 +387,7 @@ Loop:
 			// absorb. TODO: maybe throw error here
 		default:
 			l.backup()
-			word := l.input[l.start:l.pos]
+			word := l.input[l.start.Index:l.pos.Index]
 			if !l.atTerminator() {
 				return l.errorf("bad character %#U", r)
 			}
@@ -390,7 +411,7 @@ Loop:
 // strconv) will notice.
 func lexNumber(l *lexer) stateFn {
 	if !l.scanNumber() {
-		return l.errorf("bad number syntax: %q", l.input[l.start:l.pos])
+		return l.errorf("bad number syntax: %q", l.input[l.start.Index:l.pos.Index])
 	}
 	l.emit(tokens.Number)
 
@@ -456,14 +477,12 @@ func (l *lexer) atTerminator() bool {
 func (l *lexer) emit(t tokens.Token) {
 	item := Item{
 		Token: t,
-		Value: l.input[l.start:l.pos],
-		Pos:   l.pos,
-		Line:  l.line,
+		Value: l.input[l.start.Index:l.pos.Index],
+		Pos:   l.start,
 	}
 
 	l.items = append(l.items, item)
 	l.start = l.pos
-	l.startLine = l.line
 }
 
 // errorf returns an error token and terminates the scan by passing
@@ -473,7 +492,6 @@ func (l *lexer) errorf(format string, args ...interface{}) stateFn {
 		Token: tokens.Illegal,
 		Value: fmt.Sprintf(format, args...),
 		Pos:   l.start,
-		Line:  l.startLine,
 	}
 
 	l.items = append(l.items, item)

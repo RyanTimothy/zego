@@ -14,10 +14,21 @@ func RefTerm(r ...*Term) *Term {
 	return &Term{Value: Ref(r)}
 }
 
+// Equal returns true if the other Value is a Ref and is equal.
+func (r Ref) Equal(other Value) bool {
+	switch other := other.(type) {
+	case Ref:
+		return r.Compare(other) == 0
+	default:
+		return false
+	}
+}
+
 // Compare compares str to other, return <0, 0, or >0 if it is less than, equal to,
 // or greater than other.
-func (v Ref) Compare(other Value) int {
-	return Compare(v, other)
+func (r Ref) Compare(other Value) int {
+	o := other.(Ref)
+	return TermSliceCompare(r, o)
 }
 
 func (r Ref) String() string {

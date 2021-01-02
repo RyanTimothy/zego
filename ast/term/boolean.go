@@ -10,12 +10,29 @@ func BooleanTerm(b bool) *Term {
 	return &Term{Value: Boolean(b)}
 }
 
-// Compare compares bol to other, return <0, 0, or >0 if it is less than, equal to,
-// or greater than other.
-func (bol Boolean) Compare(other Value) int {
-	return Compare(bol, other)
+// Equal returns true if the other Value is a Boolean and is equal.
+func (b Boolean) Equal(other Value) bool {
+	switch other := other.(type) {
+	case Boolean:
+		return b == other
+	default:
+		return false
+	}
 }
 
-func (bol Boolean) String() string {
-	return strconv.FormatBool(bool(bol))
+// Compare compares bol to other, return <0, 0, or >0 if it is less than, equal to,
+// or greater than other.
+func (b Boolean) Compare(other Value) int {
+	o := other.(Boolean)
+	if b.Equal(o) {
+		return 0
+	}
+	if !b {
+		return -1
+	}
+	return 1
+}
+
+func (b Boolean) String() string {
+	return strconv.FormatBool(bool(b))
 }

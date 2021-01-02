@@ -19,10 +19,21 @@ func (c Call) Copy() Call {
 	return nil //termSliceCopy(c)
 }
 
+// Equal returns true if the other Value is a Call and is equal.
+func (c Call) Equal(other Value) bool {
+	switch other := other.(type) {
+	case Call:
+		return c.Compare(other) == 0
+	default:
+		return false
+	}
+}
+
 // Compare compares c to other, return <0, 0, or >0 if it is less than, equal to,
 // or greater than other.
 func (c Call) Compare(other Value) int {
-	return Compare(c, other)
+	o := other.(Call)
+	return TermSliceCompare(c, o)
 }
 
 func (c Call) String() string {

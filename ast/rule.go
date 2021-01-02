@@ -77,8 +77,69 @@ func NewExpr(terms interface{}) *Expr {
 	}
 }
 
-func (expr *Expr) String() string {
-	switch t := expr.Terms.(type) {
+// Compare returns an integer indicating whether expr is less than, equal to,
+// or greater than other.
+//
+// Expressions are compared as follows:
+//
+// 1. Declarations are always less than other expressions.
+// 2. Preceding expression (by Index) is always less than the other expression.
+// 3. Non-negated expressions are always less than than negated expressions.
+// 4. Single term expressions are always less than built-in expressions.
+//
+// Otherwise, the expression terms are compared normally. If both expressions
+// have the same terms, the modifiers are compared.
+func (e *Expr) Compare(other *Expr) int {
+
+	if e == nil {
+		if other == nil {
+			return 0
+		}
+		return -1
+	} else if other == nil {
+		return 1
+	}
+
+	o1 := e.sortOrder()
+	o2 := other.sortOrder()
+	if o1 < o2 {
+		return -1
+	} else if o2 < o1 {
+		return 1
+	}
+
+	switch {
+	case e.Index < other.Index:
+		return -1
+	case e.Index > other.Index:
+		return 1
+	}
+
+	switch t := e.Terms.(type) {
+	case *term.Term:
+		if cmp := t.Value.Compare(other.Terms.(*term.Term).Value); cmp != 0 {
+			return cmp
+		}
+	case []*term.Term:
+		if cmp := term.TermSliceCompare(t, other.Terms.([]*term.Term)); cmp != 0 {
+			return cmp
+		}
+	}
+	return 0
+}
+
+func (e *Expr) sortOrder() int {
+	switch e.Terms.(type) {
+	case *term.Term:
+		return 0
+	case []*term.Term:
+		return 1
+	}
+	return -1
+}
+
+func (e *Expr) String() string {
+	switch t := e.Terms.(type) {
 	case []*term.Term:
 		return term.Call(t).String()
 	case *term.Term:
@@ -93,6 +154,17 @@ func (p *Package) Loc() *term.Location {
 
 func (p *Package) SetLoc(l *term.Location) {
 	p.Location = l
+}
+
+// Equal returns true if pkg is equal to other.
+func (p *Package) Equal(other *Package) bool {
+	return p.Compare(other) == 0
+}
+
+// Compare returns an integer indicating whether pkg is less than, equal to,
+// or greater than other.
+func (pkg *Package) Compare(other *Package) int {
+	return pkg.Path.Compare(other.Path)
 }
 
 func (p *Package) String() string {

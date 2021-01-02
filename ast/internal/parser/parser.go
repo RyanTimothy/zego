@@ -17,37 +17,47 @@ type state struct {
 }
 
 type parser struct {
+	file   string
 	items  []lexer.Item
 	errors ast.Errors
-	state  *state
+	index  int
 }
 
-func Parse(name, input string) []ast.Statement {
+func ParseStatement(input string) (ast.Statement, error) {
+	stmts, err := ParseStatements("", input)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) != 1 {
+		return nil, fmt.Errorf("expected exactly one statement")
+	}
+	return stmts[0], nil
+}
+
+func ParseStatements(name, input string) ([]ast.Statement, error) {
 
 	p := parser{
+		file:  name,
 		items: lexer.Lex(name, input),
-	}
-
-	p.state = &state{
-		parser: &p,
-		index:  0,
 	}
 
 	return p.parse()
 }
 
 // parse runs the state machine for the parser.
-func (p *parser) parse() []ast.Statement {
+func (p *parser) parse() ([]ast.Statement, error) {
 	var statements []ast.Statement
 
-	if p.state.token() == tokens.Whitespace || p.state.token() == tokens.EOL {
-		p.state.nextNonSpace()
+	if p.token() == tokens.Whitespace || p.token() == tokens.EOL {
+		p.nextNonSpace()
 	}
 
 Loop:
 	for {
-		tok := p.state.token()
+		tok := p.token()
 		switch tok {
+		case tokens.Illegal:
+			p.errorf(p.loc(), p.items[p.index].Value)
 		case tokens.Package:
 			if pkg := p.parsePackage(); pkg != nil {
 				statements = append(statements, pkg)
@@ -61,30 +71,32 @@ Loop:
 		}
 
 		if len(p.errors) > 0 {
-			break
+			return nil, p.errors
 		}
 	}
 
-	return statements
+	return statements, nil
 }
 
 func (p *parser) parsePackage() *ast.Package {
-	tok := p.state.nextNonSpace()
+	loc := p.loc()
+	tok := p.nextNonSpace()
 	if tok != tokens.Identifier {
-		p.errorf(p.state.loc(), "expected identifier")
+		p.errorf(p.loc(), "expected identifier")
 	}
 
 	pkg := &ast.Package{}
-	pkg.SetLoc(p.state.loc())
+	pkg.SetLoc(loc)
 
 	// string term for first ident - parse reference
-	ident := p.items[p.state.index].Value
-	p.state.next()
-	t := p.parseRef(term.StringTerm(ident).SetLoc(p.state.loc()))
+	ident := p.items[p.index].Value
+	loc = p.loc()
+	p.next()
+	t := p.parseRef(term.StringTerm(ident).SetLoc(loc))
 
 	switch v := t.Value.(type) {
 	case term.Var:
-		pkg.Path = term.Ref{term.StringTerm(string(v)).SetLoc(p.state.loc())}
+		pkg.Path = term.Ref{term.StringTerm(string(v)).SetLoc(loc)}
 		break
 	case term.Ref:
 		pkg.Path = v
@@ -103,26 +115,26 @@ func (p *parser) parseRule() *ast.Rule {
 		}
 	}
 	if rule.Name == "" {
-		p.errorf(p.state.loc(), "expected rule head name")
+		p.errorf(p.loc(), "expected rule head name")
 	}
 
-	p.state.nextNonSpace()
+	p.nextNonSpace()
 
-	if p.state.token() != tokens.Declare {
-		p.errorf(p.state.loc(), "rules must use := operator")
+	if p.token() != tokens.Declare {
+		p.errorf(p.loc(), "rules must use := operator")
 		return nil
 	}
 
-	p.state.nextNonSpace()
+	p.nextNonSpace()
 
 	rule.Value = p.parseTermRelation(nil) // example: rule := a+b {}
 
-	if p.state.token() == tokens.LBrace {
-		p.state.nextNonSpace()
+	if p.token() == tokens.LBrace {
+		p.nextNonSpace()
 		if rule.Body = p.parseQuery(tokens.RBrace); rule.Body == nil {
 			return nil
 		}
-		p.state.nextNonSpace()
+		p.nextNonSpace()
 	}
 
 	return rule
@@ -131,8 +143,8 @@ func (p *parser) parseRule() *ast.Rule {
 func (p *parser) parseQuery(end tokens.Token) ast.Body {
 	body := ast.Body{}
 
-	if p.state.token() == end {
-		p.errorf(p.state.loc(), "found empty body")
+	if p.token() == end {
+		p.errorf(p.loc(), "found empty body")
 		return nil
 	}
 
@@ -144,7 +156,7 @@ func (p *parser) parseQuery(end tokens.Token) ast.Body {
 
 		body.Append(expr)
 
-		if p.state.token() == end {
+		if p.token() == end {
 			return body
 		}
 	}
@@ -156,9 +168,9 @@ func (p *parser) parseExpr() *ast.Expr {
 		return nil
 	}
 
-	tok := p.state.token()
+	tok := p.token()
 	if tok == tokens.Declare {
-		p.state.nextNonSpace()
+		p.nextNonSpace()
 		if rhs := p.parseTermRelation(nil); rhs != nil {
 			op := term.OpTerm(tok.String()).SetLoc(lhs.Location)
 			return ast.NewExpr([]*term.Term{op, lhs, rhs})
@@ -174,33 +186,33 @@ func (p *parser) parseExpr() *ast.Expr {
 }
 
 func (p *parser) parseTerm() *term.Term {
-	switch p.state.token() {
+	switch p.token() {
 	case tokens.True:
-		term := term.BooleanTerm(true).SetLoc(p.state.loc())
-		p.state.nextNonSpace()
+		term := term.BooleanTerm(true).SetLoc(p.loc())
+		p.nextNonSpace()
 		return term
 	case tokens.False:
-		term := term.BooleanTerm(false).SetLoc(p.state.loc())
-		p.state.nextNonSpace()
+		term := term.BooleanTerm(false).SetLoc(p.loc())
+		p.nextNonSpace()
 		return term
 	case tokens.Identifier:
 		term := p.parseVar()
 		// check if next is ident.field or ident.field[_] or ident.call(_)
-		if tok := p.state.next(); tok == tokens.Field || tok == tokens.LParenthesis || tok == tokens.LBracket {
+		if tok := p.next(); tok == tokens.Field || tok == tokens.LParenthesis || tok == tokens.LBracket {
 			return p.parseRef(term)
 		}
-		p.state.nextNonSpace()
+		p.nextNonSpace()
 		return term
 	case tokens.Number:
 		return p.parseNumber()
 	case tokens.LParenthesis:
-		p.state.nextNonSpace()
+		p.nextNonSpace()
 		if term := p.parseTermRelation(nil); term != nil {
-			if p.state.token() != tokens.RParenthesis {
-				p.errorf(p.state.loc(), "non-terminated expression")
+			if p.token() != tokens.RParenthesis {
+				p.errorf(p.loc(), "non-terminated expression")
 				return nil
 			}
-			if tok := p.state.next(); tok == tokens.Field || tok == tokens.LParenthesis || tok == tokens.LBracket {
+			if tok := p.next(); tok == tokens.Field || tok == tokens.LParenthesis || tok == tokens.LBracket {
 				return p.parseRef(term)
 			}
 			return term
@@ -208,21 +220,21 @@ func (p *parser) parseTerm() *term.Term {
 			return nil
 		}
 	default:
-		tok := p.state.token()
+		tok := p.token()
 		tokType := "token"
 		if tok >= tokens.Package && tok <= tokens.False {
 			tokType = "keyword"
 		}
-		p.errorf(p.state.loc(), "unexpected %s %s", tok.String(), tokType)
+		p.errorf(p.loc(), "unexpected %s %s", tok.String(), tokType)
 		return nil
 	}
 }
 
 func (p *parser) parseNumber() *term.Term {
-	loc := p.state.loc()
+	loc := p.loc()
 
 	// Ensure that the number is valid
-	s := p.items[p.state.index].Value
+	s := p.items[p.index].Value
 	f, ok := new(big.Float).SetString(s)
 	if !ok {
 		p.errorf(loc, "expected number")
@@ -245,63 +257,63 @@ func (p *parser) parseNumber() *term.Term {
 	// Note: Use the original string, do *not* round trip from
 	// the big.Float as it can cause precision loss.
 	r := term.NumberTerm(json.Number(s)).SetLoc(loc)
-	p.state.nextNonSpace()
+	p.nextNonSpace()
 	return r
 }
 
 func (p *parser) parseVar() *term.Term {
-	v := p.items[p.state.index].Value // TODO: generate wildcard '_'
+	v := p.items[p.index].Value // TODO: generate wildcard '_'
 	return term.VarTerm(v)
 }
 
 func (p *parser) parseRef(head *term.Term) *term.Term {
 	ref := []*term.Term{head}
 
-	loc := p.state.loc()
+	loc := p.loc()
 
 	for {
-		switch p.state.token() {
+		switch p.token() {
 		case tokens.Field:
-			field := p.items[p.state.index].Value[1:] // .field <-- remove dot from lexer value
-			ref = append(ref, term.StringTerm(field).SetLoc(p.state.loc()))
-			p.state.next()
+			field := p.items[p.index].Value[1:] // .field <-- remove dot from lexer value
+			ref = append(ref, term.StringTerm(field).SetLoc(p.loc()))
+			p.next()
 		case tokens.LParenthesis:
 			term := p.parseCall(term.RefTerm(ref...).SetLoc(loc))
 			if term != nil {
-				if tok := p.state.token(); tok == tokens.Field || tok == tokens.LBracket {
+				if tok := p.token(); tok == tokens.Field || tok == tokens.LBracket {
 					p.parseRef(term) // with 'method(x).something' OR 'method(x)[_]'
 				}
 			}
 			break
 		case tokens.LBracket:
-			p.state.nextNonSpace()
+			p.nextNonSpace()
 			if term := p.parseTermRelation(nil); term != nil {
-				if p.state.token() != tokens.RBracket {
-					p.errorf(p.state.loc(), "expected %v", tokens.RBracket)
+				if p.token() != tokens.RBracket {
+					p.errorf(p.loc(), "expected %v", tokens.RBracket)
 					return nil
 				}
 				ref = append(ref, term)
-				p.state.next()
+				p.next()
 			} else {
 				return nil
 			}
 			break
 		default:
-			p.state.nextNonSpace()
+			p.nextNonSpace()
 			return term.RefTerm(ref...)
 		}
 	}
 }
 
 func (p *parser) parseCall(operator *term.Term) *term.Term {
-	p.state.nextNonSpace()
+	p.nextNonSpace()
 
-	if p.state.token() == tokens.RParenthesis {
+	if p.token() == tokens.RParenthesis {
 		return term.CallTerm(operator)
 	}
 
 	if r := p.parseTermList(tokens.RParenthesis, []*term.Term{operator}); r != nil {
-		p.state.next()
+		p.next()
 		return term.CallTerm(r...)
 	}
 
@@ -313,17 +325,17 @@ func (p *parser) parseTermList(end tokens.Token, r []*term.Term) []*term.Term {
 		term := p.parseTermRelation(nil)
 		if term != nil {
 			r = append(r, term)
-			switch p.state.token() {
+			switch p.token() {
 			case end:
 				return r
 			case tokens.Comma:
-				p.state.nextNonSpace()
-				if p.state.token() == end {
+				p.nextNonSpace()
+				if p.token() == end {
 					return r
 				}
 				continue
 			default:
-				p.errorf(p.state.loc(), "expected %q or %q", tokens.Comma, end)
+				p.errorf(p.loc(), "expected %q or %q", tokens.Comma, end)
 			}
 		}
 		return nil
@@ -336,67 +348,67 @@ func (p *parser) parseTermRelation(lhs *term.Term) *term.Term {
 	}
 
 	if lhs != nil {
-		tok := p.state.token()
+		tok := p.token()
 		if tok == tokens.Whitespace {
-			tok = p.state.nextNonSpace()
+			tok = p.nextNonSpace()
 		}
-		loc := p.state.loc()
+		loc := p.loc()
 
 		if tok == tokens.Multiply || tok == tokens.Divide || tok == tokens.Modulus {
-			p.state.nextNonSpace()
+			p.nextNonSpace()
 			if rhs := p.parseTermRelation(nil); rhs != nil {
 				op := term.OpTerm(tok.String()).SetLoc(loc)
 				call := term.CallTerm(op, lhs, rhs).SetLoc(lhs.Location)
 
-				tok = p.state.token()
+				tok = p.token()
 				if tok == tokens.Multiply || tok == tokens.Divide || tok == tokens.Modulus {
 					return p.parseTermRelation(call)
 				}
 				return call
 			}
 		} else if tok == tokens.Add || tok == tokens.Subtract {
-			p.state.nextNonSpace()
+			p.nextNonSpace()
 			if rhs := p.parseTermRelation(nil); rhs != nil {
 				op := term.OpTerm(tok.String()).SetLoc(loc)
 				call := term.CallTerm(op, lhs, rhs).SetLoc(lhs.Location)
 
-				tok = p.state.token()
+				tok = p.token()
 				if tok == tokens.Add || tok == tokens.Subtract {
 					return p.parseTermRelation(call)
 				}
 				return call
 			}
 		} else if tok == tokens.And {
-			p.state.nextNonSpace()
+			p.nextNonSpace()
 			if rhs := p.parseTermRelation(nil); rhs != nil {
 				op := term.OpTerm(tok.String()).SetLoc(loc)
 				call := term.CallTerm(op, lhs, rhs).SetLoc(lhs.Location)
 
-				tok = p.state.token()
+				tok = p.token()
 				if tok == tokens.And {
 					return p.parseTermRelation(call)
 				}
 				return call
 			}
 		} else if tok == tokens.Or {
-			p.state.nextNonSpace()
+			p.nextNonSpace()
 			if rhs := p.parseTermRelation(nil); rhs != nil {
 				op := term.OpTerm(tok.String()).SetLoc(loc)
 				call := term.CallTerm(op, lhs, rhs).SetLoc(lhs.Location)
 
-				tok = p.state.token()
+				tok = p.token()
 				if tok == tokens.Or {
 					return p.parseTermRelation(call)
 				}
 				return call
 			}
 		} else if tok == tokens.Equal || tok == tokens.NEqual || tok == tokens.LT || tok == tokens.GT || tok == tokens.LTE || tok == tokens.GTE {
-			p.state.nextNonSpace()
+			p.nextNonSpace()
 			if rhs := p.parseTermRelation(nil); rhs != nil {
 				op := term.OpTerm(tok.String()).SetLoc(loc)
 				call := term.CallTerm(op, lhs, rhs).SetLoc(lhs.Location)
 
-				tok = p.state.token()
+				tok = p.token()
 				if tok == tokens.Equal || tok == tokens.NEqual || tok == tokens.LT || tok == tokens.GT || tok == tokens.LTE || tok == tokens.GTE {
 					return p.parseTermRelation(call)
 				}
@@ -415,31 +427,40 @@ func (p *parser) errorf(l *term.Location, f string, a ...interface{}) {
 	})
 }
 
-func (s *state) nextNonSpace() tokens.Token {
+func (p *parser) nextNonSpace() tokens.Token {
 Loop:
 	for {
-		switch s.next() {
+		switch p.next() {
 		case tokens.Whitespace, tokens.EOL:
 			continue Loop
 		default:
 			break Loop
 		}
 	}
-	return s.token()
+	return p.token()
 }
 
-func (s *state) next() tokens.Token {
-	s.index++
-	return s.token()
+func (p *parser) next() tokens.Token {
+	p.index++
+	return p.token()
 }
 
-func (s *state) token() tokens.Token {
-	if s.index < len(s.parser.items) {
-		return s.parser.items[s.index].Token
+func (p *parser) token() tokens.Token {
+	if p.index < len(p.items) {
+		return p.items[p.index].Token
 	}
 	return tokens.EOF
 }
 
-func (s *state) loc() *term.Location {
-	return &term.Location{} // TODO : get location
+func (p *parser) loc() *term.Location {
+	if p.index < len(p.items) {
+		return &term.Location{
+			File:   p.file,
+			Line:   p.items[p.index].Pos.Line,
+			Column: p.items[p.index].Pos.Column,
+		}
+	}
+	return &term.Location{
+		File: p.file,
+	}
 }
