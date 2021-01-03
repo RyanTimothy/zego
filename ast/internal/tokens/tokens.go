@@ -84,7 +84,7 @@ var strings = [...]string{
 	Colon:        ":",
 	Declare:      "declare",
 	Assign:       "=",
-	Add:          "plus",     // +
+	Add:          "add",      // +
 	Subtract:     "minus",    // -
 	Multiply:     "multiply", // *
 	Divide:       "divide",   // /

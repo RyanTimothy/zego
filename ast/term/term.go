@@ -31,6 +31,14 @@ func (t *Term) SetLoc(l *Location) *Term {
 	return t
 }
 
+func (t *Term) Compare(other *Term) int {
+	switch v := t.Value.(type) {
+	case Boolean, Call, Number, Op, Ref, String, Var:
+		return v.Compare(other.Value)
+	}
+	return 0
+}
+
 func (term *Term) String() string {
 	return term.Value.String()
 }

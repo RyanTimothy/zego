@@ -180,11 +180,64 @@ func (r *Rule) SetLoc(l *term.Location) {
 	r.Location = l
 }
 
+// Equal returns true if rule is equal to other.
+func (rule *Rule) Equal(other *Rule) bool {
+	return rule.Compare(other) == 0
+}
+
+// Compare returns an integer indicating whether rule is less than, equal to,
+// or greater than other.
+func (rule *Rule) Compare(other *Rule) int {
+	if rule == nil {
+		if other == nil {
+			return 0
+		}
+		return -1
+	} else if other == nil {
+		return 1
+	}
+	if cmp := rule.Name.Compare(other.Name); cmp != 0 {
+		return cmp
+	}
+	if cmp := rule.Value.Compare(other.Value); cmp != 0 {
+		return cmp
+	}
+	return rule.Body.Compare(other.Body)
+}
+
 func (r *Rule) String() string {
 	if r.Value == nil {
 		return r.Name.String() + " {\n" + r.Body.String() + "\n}\n"
 	}
 	return r.Name.String() + " := " + r.Value.String() + " {\n" + r.Body.String() + "\n}\n"
+}
+
+// NewBody returns a new Body containing the given expressions. The indices of
+// the immediate expressions will be reset.
+func NewBody(exprs ...*Expr) Body {
+	for i, expr := range exprs {
+		expr.Index = i
+	}
+	return Body(exprs)
+}
+
+func (body Body) Compare(other Body) int {
+	minLen := len(body)
+	if len(other) < minLen {
+		minLen = len(other)
+	}
+	for i := 0; i < minLen; i++ {
+		if cmp := body[i].Compare(other[i]); cmp != 0 {
+			return cmp
+		}
+	}
+	if len(body) < len(other) {
+		return -1
+	}
+	if len(other) < len(body) {
+		return 1
+	}
+	return 0
 }
 
 // Append adds the expr to the body and updates the expr's index accordingly.

@@ -170,19 +170,20 @@ func (p *parser) parseExpr() *ast.Expr {
 
 	tok := p.token()
 	if tok == tokens.Declare {
+		loc := p.loc()
 		p.nextNonSpace()
 		if rhs := p.parseTermRelation(nil); rhs != nil {
-			op := term.OpTerm(tok.String()).SetLoc(lhs.Location)
+			op := term.OpTerm(tok.String()).SetLoc(loc)
 			return ast.NewExpr([]*term.Term{op, lhs, rhs})
 		}
 		return nil
 	}
 
-	if call, ok := lhs.Value.(term.Call); ok {
-		return ast.NewExpr([]*term.Term(call))
-	}
+	// if call, ok := lhs.Value.(term.Call); ok {
+	// 	return ast.NewExpr([]*term.Term(call))
+	// }
 
-	return nil
+	return ast.NewExpr(lhs)
 }
 
 func (p *parser) parseTerm() *term.Term {
@@ -195,13 +196,18 @@ func (p *parser) parseTerm() *term.Term {
 		term := term.BooleanTerm(false).SetLoc(p.loc())
 		p.nextNonSpace()
 		return term
+	case tokens.String:
+		term := p.parseString()
+		p.nextNonSpace()
+		return term
 	case tokens.Identifier:
 		term := p.parseVar()
 		// check if next is ident.field or ident.field[_] or ident.call(_)
 		if tok := p.next(); tok == tokens.Field || tok == tokens.LParenthesis || tok == tokens.LBracket {
 			return p.parseRef(term)
+		} else if tok == tokens.Whitespace || tok == tokens.EOL {
+			p.nextNonSpace()
 		}
-		p.nextNonSpace()
 		return term
 	case tokens.Number:
 		return p.parseNumber()
@@ -228,6 +234,16 @@ func (p *parser) parseTerm() *term.Term {
 		p.errorf(p.loc(), "unexpected %s %s", tok.String(), tokType)
 		return nil
 	}
+}
+
+func (p *parser) parseString() *term.Term {
+	var s string
+	err := json.Unmarshal([]byte(p.items[p.index].Value), &s)
+	if err != nil {
+		p.errorf(p.loc(), "illegal string literal: %s", p.items[p.index].Value)
+		return nil
+	}
+	return term.StringTerm(s).SetLoc(p.loc())
 }
 
 func (p *parser) parseNumber() *term.Term {
@@ -283,6 +299,7 @@ func (p *parser) parseRef(head *term.Term) *term.Term {
 				if tok := p.token(); tok == tokens.Field || tok == tokens.LBracket {
 					p.parseRef(term) // with 'method(x).something' OR 'method(x)[_]'
 				}
+				p.next()
 			}
 			break
 		case tokens.LBracket:
@@ -293,13 +310,13 @@ func (p *parser) parseRef(head *term.Term) *term.Term {
 					return nil
 				}
 				ref = append(ref, term)
-				p.next()
+				p.next() // TODO : problem because of line 317 => input.b[0 ']'
 			} else {
 				return nil
 			}
 			break
 		default:
-			p.nextNonSpace()
+			//p.nextNonSpace()
 			return term.RefTerm(ref...)
 		}
 	}
