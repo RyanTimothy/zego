@@ -23,27 +23,6 @@ type parser struct {
 	index  int
 }
 
-func ParseStatement(input string) (ast.Statement, error) {
-	stmts, err := ParseStatements("", input)
-	if err != nil {
-		return nil, err
-	}
-	if len(stmts) != 1 {
-		return nil, fmt.Errorf("expected exactly one statement")
-	}
-	return stmts[0], nil
-}
-
-func ParseStatements(name, input string) ([]ast.Statement, error) {
-
-	p := parser{
-		file:  name,
-		items: lexer.Lex(name, input),
-	}
-
-	return p.parse()
-}
-
 // parse runs the state machine for the parser.
 func (p *parser) parse() ([]ast.Statement, error) {
 	var statements []ast.Statement
@@ -205,8 +184,6 @@ func (p *parser) parseTerm() *term.Term {
 		// check if next is ident.field or ident.field[_] or ident.call(_)
 		if tok := p.next(); tok == tokens.Field || tok == tokens.LParenthesis || tok == tokens.LBracket {
 			return p.parseRef(term)
-		} else if tok == tokens.Whitespace || tok == tokens.EOL {
-			p.nextNonSpace()
 		}
 		return term
 	case tokens.Number:
@@ -310,13 +287,15 @@ func (p *parser) parseRef(head *term.Term) *term.Term {
 					return nil
 				}
 				ref = append(ref, term)
-				p.next() // TODO : problem because of line 317 => input.b[0 ']'
+				p.next()
 			} else {
 				return nil
 			}
 			break
 		default:
-			//p.nextNonSpace()
+			if p.token() == tokens.Whitespace || p.token() == tokens.EOL {
+				p.nextNonSpace()
+			}
 			return term.RefTerm(ref...)
 		}
 	}

@@ -77,6 +77,10 @@ func NewExpr(terms interface{}) *Expr {
 	}
 }
 
+func (e *Expr) SetLoc(l *term.Location) {
+	e.Location = l
+}
+
 // Compare returns an integer indicating whether expr is less than, equal to,
 // or greater than other.
 //
@@ -219,6 +223,21 @@ func NewBody(exprs ...*Expr) Body {
 		expr.Index = i
 	}
 	return Body(exprs)
+}
+
+// Loc returns the location of the Body in the definition.
+func (body Body) Loc() *term.Location {
+	if len(body) == 0 {
+		return nil
+	}
+	return body[0].Location
+}
+
+// SetLoc sets the location on body.
+func (body Body) SetLoc(loc *term.Location) {
+	if len(body) != 0 {
+		body[0].SetLoc(loc)
+	}
 }
 
 func (body Body) Compare(other Body) int {

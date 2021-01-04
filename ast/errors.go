@@ -18,6 +18,13 @@ type Error struct {
 	Location *term.Location `json:"location,omitempty"`
 }
 
+func NewError(loc *term.Location, f string, a ...interface{}) *Error {
+	return &Error{
+		Location: loc,
+		Message:  fmt.Sprintf(f, a...),
+	}
+}
+
 func (e Errors) Error() string {
 
 	if len(e) == 0 {
