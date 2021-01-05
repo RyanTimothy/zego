@@ -29,6 +29,10 @@ func (c *Compiler) Compile(modules map[string]*ast.Module) {
 
 }
 
+func (c *Compiler) QueryCompiler() QueryCompiler {
+	return nil
+}
+
 func (c *Compiler) Failed() bool {
 	return false
 }

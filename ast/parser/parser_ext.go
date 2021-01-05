@@ -4,9 +4,18 @@ import (
 	"fmt"
 
 	"avidbound.com/zego/ast"
-	"avidbound.com/zego/ast/internal/lexer"
 	"avidbound.com/zego/ast/term"
 )
+
+func ParseQuery(input string) (ast.Body, error) {
+	body, errs := NewParser("", input).parseQuery()
+
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	return body, nil
+}
 
 // ParseModule returns a parsed Module object.
 // For details on Module objects and their fields, see policy.go.
@@ -31,13 +40,7 @@ func ParseStatement(input string) (ast.Statement, error) {
 }
 
 func ParseStatements(name, input string) ([]ast.Statement, error) {
-
-	p := parser{
-		file:  name,
-		items: lexer.Lex(name, input),
-	}
-
-	return p.parse()
+	return NewParser(name, input).parse()
 }
 
 func parseModule(filename string, stmts []ast.Statement) (*ast.Module, error) {

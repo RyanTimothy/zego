@@ -9,7 +9,7 @@ import (
 
 // Errors represents a series of errors encountered during parsing, compiling,
 // etc.
-type Errors []*Error
+type Errors []error
 
 // Error represents a single error caught during parsing, compiling, etc.
 type Error struct {

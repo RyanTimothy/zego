@@ -23,6 +23,14 @@ type parser struct {
 	index  int
 }
 
+func NewParser(name, input string) *parser {
+	p := &parser{
+		file:  name,
+		items: lexer.Lex(name, input),
+	}
+	return p
+}
+
 // parse runs the state machine for the parser.
 func (p *parser) parse() ([]ast.Statement, error) {
 	var statements []ast.Statement
@@ -55,6 +63,19 @@ Loop:
 	}
 
 	return statements, nil
+}
+
+func (p *parser) parseQuery() (ast.Body, ast.Errors) {
+	if p.token() == tokens.Whitespace || p.token() == tokens.EOL {
+		p.nextNonSpace()
+	}
+
+	body := p.parseBody(tokens.EOF)
+	if len(p.errors) > 0 {
+		return nil, p.errors
+	}
+
+	return body, nil
 }
 
 func (p *parser) parsePackage() *ast.Package {
@@ -110,7 +131,7 @@ func (p *parser) parseRule() *ast.Rule {
 
 	if p.token() == tokens.LBrace {
 		p.nextNonSpace()
-		if rule.Body = p.parseQuery(tokens.RBrace); rule.Body == nil {
+		if rule.Body = p.parseBody(tokens.RBrace); rule.Body == nil {
 			return nil
 		}
 		p.nextNonSpace()
@@ -119,7 +140,7 @@ func (p *parser) parseRule() *ast.Rule {
 	return rule
 }
 
-func (p *parser) parseQuery(end tokens.Token) ast.Body {
+func (p *parser) parseBody(end tokens.Token) ast.Body {
 	body := ast.Body{}
 
 	if p.token() == end {
