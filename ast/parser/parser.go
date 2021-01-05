@@ -174,7 +174,7 @@ func (p *parser) parseExpr() *ast.Expr {
 		p.nextNonSpace()
 		if rhs := p.parseTermRelation(nil); rhs != nil {
 			op := term.OpTerm(tok.String()).SetLoc(loc)
-			return ast.NewExpr([]*term.Term{op, lhs, rhs})
+			return ast.NewExpr(term.CallTerm(op, lhs, rhs))
 		}
 		return nil
 	}
@@ -295,11 +295,11 @@ func (p *parser) parseRef(head *term.Term) *term.Term {
 			term := p.parseCall(term.RefTerm(ref...).SetLoc(loc))
 			if term != nil {
 				if tok := p.token(); tok == tokens.Field || tok == tokens.LBracket {
-					p.parseRef(term) // with 'method(x).something' OR 'method(x)[_]'
+					term = p.parseRef(term) // with 'method(x).something' OR 'method(x)[_]'
 				}
 				p.next()
 			}
-			break
+			return term
 		case tokens.LBracket:
 			p.nextNonSpace()
 			if term := p.parseTermRelation(nil); term != nil {

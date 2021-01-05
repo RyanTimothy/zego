@@ -1,6 +1,10 @@
 package term
 
-import "strconv"
+import (
+	"strconv"
+
+	"github.com/OneOfOne/xxhash"
+)
 
 // String represents a string value as defined by JSON.
 type String string
@@ -23,6 +27,10 @@ func (s String) Equal(other Value) bool {
 // Compare compares str to other, return <0, 0, or >0 if it is less than, equal to,
 // or greater than other.
 func (s String) Compare(other Value) int {
+	if sort := compareSortOrder(s, other); sort != 0 {
+		return sort
+	}
+
 	o := other.(String)
 	if s.Equal(o) {
 		return 0
@@ -35,4 +43,14 @@ func (s String) Compare(other Value) int {
 
 func (s String) String() string {
 	return strconv.Quote(string(s))
+}
+
+// Hash returns the hash code for the Value.
+func (s String) Hash() int {
+	h := xxhash.ChecksumString64S(string(s), hashSeed0)
+	return int(h)
+}
+
+func (s String) SortOrder() int {
+	return 3
 }

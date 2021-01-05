@@ -17,7 +17,7 @@ func main() {
 	input := `{"a": "test"}`
 
 	query, err := zego.New(
-		zego.Query("zego.test.a"),
+		zego.Query("x := zego.test.a"),
 		zego.Module("test.zego", testModule),
 	).PrepareForEval(ctx)
 
@@ -31,5 +31,7 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println(rs[0])
+	if len(rs) > 0 {
+		fmt.Println(rs[0])
+	}
 }

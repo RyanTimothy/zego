@@ -7,6 +7,7 @@ type QueryCompiler interface {
 }
 
 type queryCompiler struct {
+	compiler *Compiler
 }
 
 func (c queryCompiler) Compile(q ast.Body) (ast.Body, error) {

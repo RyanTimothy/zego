@@ -36,13 +36,13 @@ func TestPackage(t *testing.T) {
 func TestRule(t *testing.T) {
 	assertParseRule(t, "constant",
 		`test := "abc" {
-			true
+			b := true
 		}`,
 		&ast.Rule{
 			Name:  term.Var("test"),
 			Value: term.StringTerm("abc"),
 			Body: ast.NewBody(
-				ast.NewExpr(term.BooleanTerm(true)),
+				ast.NewExpr(term.CallTerm(term.OpTerm("declare"), term.VarTerm("b"), term.BooleanTerm(true))),
 			),
 		})
 
@@ -55,7 +55,7 @@ func TestRule(t *testing.T) {
 
 	assertParseRule(t, "dynamic",
 		`test := input["a"] {
-			input.b[1] == 12.34
+			input.b[ 1 ] == 12.34
 		}`,
 		&ast.Rule{
 			Name:  term.Var("test"),
@@ -65,6 +65,18 @@ func TestRule(t *testing.T) {
 					term.OpTerm("equal"),
 					term.RefTerm(term.VarTerm("input"), term.StringTerm("b"), term.NumberTerm("1")),
 					term.NumberTerm("12.34"))),
+			),
+		})
+
+	assertParseRule(t, "call",
+		`test := "abc" {
+			b := a.b( 1 )
+		}`,
+		&ast.Rule{
+			Name:  term.Var("test"),
+			Value: term.StringTerm("abc"),
+			Body: ast.NewBody(
+				ast.NewExpr(term.CallTerm(term.OpTerm("declare"), term.VarTerm("b"), term.CallTerm(term.RefTerm(term.VarTerm("a"), term.StringTerm("b")), term.NumberTerm("1")))),
 			),
 		})
 }

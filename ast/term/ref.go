@@ -27,6 +27,10 @@ func (r Ref) Equal(other Value) bool {
 // Compare compares str to other, return <0, 0, or >0 if it is less than, equal to,
 // or greater than other.
 func (r Ref) Compare(other Value) int {
+	if sort := compareSortOrder(r, other); sort != 0 {
+		return sort
+	}
+
 	o := other.(Ref)
 	return TermSliceCompare(r, o)
 }
@@ -51,4 +55,13 @@ func (r Ref) String() string {
 		}
 	}
 	return strings.Join(buf, "")
+}
+
+// Hash returns the hash code for the Value.
+func (r Ref) Hash() int {
+	return termSliceHash(r)
+}
+
+func (r Ref) SortOrder() int {
+	return 5
 }

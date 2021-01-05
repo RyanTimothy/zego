@@ -21,7 +21,8 @@ type Option func(r *Zego)
 
 func New(options ...Option) *Zego {
 	z := &Zego{
-		compiler: compile.NewCompiler(),
+		compiler:      compile.NewCompiler(),
+		parsedModules: map[string]*ast.Module{},
 	}
 
 	for _, o := range options {
@@ -80,6 +81,11 @@ func (r *Zego) prepare(ctx context.Context) error {
 		return err
 	}
 
+	err = r.compileModules(ctx)
+	if err != nil {
+		return err
+	}
+
 	r.parsedQuery, err = r.parseQuery()
 	if err != nil {
 		return err
@@ -118,6 +124,17 @@ func (r *Zego) parseQuery() (ast.Body, error) {
 	return parser.ParseQuery(r.query)
 }
 
+func (r *Zego) compileModules(ctx context.Context) error {
+
+	if len(r.parsedModules) > 0 {
+		if r.compiler.Compile(r.parsedModules); r.compiler.Failed() {
+			return r.compiler.Errors
+		}
+	}
+
+	return nil
+}
+
 func (r *Zego) compileAndCacheQuery() error {
 	_, _, err := r.compileQuery()
 	if err != nil {
@@ -128,7 +145,7 @@ func (r *Zego) compileAndCacheQuery() error {
 }
 
 func (r *Zego) compileQuery() (compile.QueryCompiler, ast.Body, error) {
-	qc := r.compiler.QueryCompiler()
+	qc := r.compiler.NewQueryCompiler()
 
 	compiled, err := qc.Compile(r.parsedQuery)
 

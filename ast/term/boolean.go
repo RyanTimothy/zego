@@ -23,6 +23,10 @@ func (b Boolean) Equal(other Value) bool {
 // Compare compares bol to other, return <0, 0, or >0 if it is less than, equal to,
 // or greater than other.
 func (b Boolean) Compare(other Value) int {
+	if sort := compareSortOrder(b, other); sort != 0 {
+		return sort
+	}
+
 	o := other.(Boolean)
 	if b.Equal(o) {
 		return 0
@@ -35,4 +39,16 @@ func (b Boolean) Compare(other Value) int {
 
 func (b Boolean) String() string {
 	return strconv.FormatBool(bool(b))
+}
+
+// Hash returns the hash code for the Value.
+func (b Boolean) Hash() int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+func (b Boolean) SortOrder() int {
+	return 1
 }

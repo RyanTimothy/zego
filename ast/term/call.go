@@ -32,6 +32,10 @@ func (c Call) Equal(other Value) bool {
 // Compare compares c to other, return <0, 0, or >0 if it is less than, equal to,
 // or greater than other.
 func (c Call) Compare(other Value) int {
+	if sort := compareSortOrder(c, other); sort != 0 {
+		return sort
+	}
+
 	o := other.(Call)
 	return TermSliceCompare(c, o)
 }
@@ -42,4 +46,13 @@ func (c Call) String() string {
 		args[i-1] = c[i].String()
 	}
 	return fmt.Sprintf("%v(%v)", c[0], strings.Join(args, ", "))
+}
+
+// Hash returns the hash code for the Value.
+func (c Call) Hash() int {
+	return termSliceHash(c)
+}
+
+func (c Call) SortOrder() int {
+	return 6
 }
